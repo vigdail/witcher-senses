@@ -4,3 +4,6 @@
 [submodule "vendor/glfw"]
 	path = vendor/glfw
 	url = https://github.com/glfw/glfw.git
+[submodule "vendor/gl"]
+	path = vendor/gl
+	url = https://github.com/vigdail/gl.git

@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 20)
 add_subdirectory(vendor)
 
 include_directories(vendor/glad/include)
+include_directories(vendor/gl/include)
 
-add_executable(witcher_senses src/main.cpp)
-target_link_libraries(witcher_senses glad glfw)
+file(GLOB SOURCE "src/**/*.cpp" "src/*.cpp")
+
+add_executable(witcher_senses ${SOURCE})
+target_link_libraries(witcher_senses gl glfw)
