@@ -7,7 +7,9 @@ add_subdirectory(vendor)
 
 include_directories(vendor/glad/include)
 include_directories(vendor/gl/include)
-include_directories(assimp/include)
+include_directories(vendor/assimp/include)
+include_directories(vendor/entt/single_include)
+#include_directories(vendor)
 
 file(GLOB SOURCE "src/**/*.cpp" "src/*.cpp")
 

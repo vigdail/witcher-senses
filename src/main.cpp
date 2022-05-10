@@ -4,17 +4,55 @@
 #include <gl/auxiliary/glm_uniforms.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <entt/entt.hpp>
 
 #include <iostream>
 #include <vector>
+#include <memory>
 
 constexpr int WINDOW_WIDTH = 1280;
 constexpr int WINDOW_HEIGHT = 720;
 
 void debugMessageCallback(gl::debug_log log) {
   std::cerr << log.message << std::endl;
+}
+
+struct Transform {
+  glm::vec3 translation{};
+  glm::vec3 rotation{};
+  glm::vec3 scale{1.0f};
+
+  Transform() = default;
+  Transform(const Transform&) = default;
+
+  Transform(const glm::vec3& translation) : translation{translation} {}
+
+  glm::mat4 transform() const {
+    glm::mat4 rotation_matrix = glm::toMat4(glm::quat(rotation));
+
+    return glm::translate(glm::mat4(1.0f), translation)
+        * rotation_matrix
+        * glm::scale(glm::mat4(1.0f), scale);
+  }
+};
+
+struct Color {
+  glm::vec3 color;
+};
+
+using MeshHandle = std::shared_ptr<Mesh>;
+using World = entt::registry;
+
+struct Move {
+  bool placeholder{};
+};
+
+void moveSphereSystem(World& world) {
+  world.view<Transform, Move>().each([&](Transform& transform, const Move& m) {
+    transform.translation.x = 5.0 * sin(glfwGetTime());
+  });
 }
 
 int main() {
@@ -47,6 +85,8 @@ int main() {
                             GL_DEBUG_SEVERITY_NOTIFICATION, false);
 #endif
 
+  entt::registry world;
+
   gl::set_depth_test_enabled(true);
 
   gl::shader vert_shader(GL_VERTEX_SHADER);
@@ -63,14 +103,20 @@ int main() {
   }
   program.use();
 
-  Mesh sphere;
-  sphere.load("../assets/sphere.gltf");
-  glm::mat4 sphere_transform(1.0f);
-  sphere_transform = glm::translate(sphere_transform, glm::vec3(0.0f, 1.0f, 0.0f));
+  auto sphere_mesh = std::make_shared<Mesh>();
+  sphere_mesh->load("../assets/sphere.gltf");
+  auto sphere = world.create();
+  world.emplace<MeshHandle>(sphere, sphere_mesh);
+  world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
+  world.emplace<Color>(sphere, Color{glm::vec3(1.0f, 0.0f, 0.0f)});
+  world.emplace<Move>(sphere, Move{});
 
-  Mesh plane;
-  plane.load("../assets/plane.gltf");
-  glm::mat4 plane_transform(1.0f);
+  auto plane_mesh = std::make_shared<Mesh>();
+  plane_mesh->load("../assets/plane.gltf");
+  auto plane = world.create();
+  world.emplace<MeshHandle>(plane, plane_mesh);
+  world.emplace<Transform>(plane, Transform{});
+  world.emplace<Color>(plane, Color{glm::vec3(0.0f, 1.0f, 0.0f)});
 
   const glm::vec3 camera_origin(3.0f, 3.0f, -10.0f);
   glm::mat4 view = glm::lookAt(camera_origin, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0));
@@ -88,15 +134,13 @@ int main() {
     gl::set_clear_color({0.3, 0.3, 0.3, 1.0});
     gl::clear();
 
-    program.set_uniform(color_location, glm::vec3(0.0, 1.0, 0.0));
-    program.set_uniform(model_location, plane_transform);
-    plane.bind();
-    gl::draw_elements(GL_TRIANGLES, plane.getIndexCount(), GL_UNSIGNED_INT, nullptr);
-
-    program.set_uniform(color_location, glm::vec3(1.0, 0.0, 0.0));
-    program.set_uniform(model_location, sphere_transform);
-    sphere.bind();
-    gl::draw_elements(GL_TRIANGLES, sphere.getIndexCount(), GL_UNSIGNED_INT, nullptr);
+    world.view<Transform, MeshHandle, Color>().each([&](const auto& transform, const auto& mesh, const auto& color) {
+      program.set_uniform(color_location, color.color);
+      program.set_uniform(model_location, transform.transform());
+      mesh->bind();
+      gl::draw_elements(GL_TRIANGLES, mesh->getIndexCount(), GL_UNSIGNED_INT, nullptr);
+    });
+    moveSphereSystem(world);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
