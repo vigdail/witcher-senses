@@ -7,3 +7,6 @@
 [submodule "vendor/gl"]
 	path = vendor/gl
 	url = https://github.com/vigdail/gl.git
+[submodule "vendor/assimp"]
+	path = vendor/assimp
+	url = https://github.com/assimp/assimp.git

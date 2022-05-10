@@ -10,5 +10,5 @@ include_directories(vendor/gl/include)
 
 file(GLOB SOURCE "src/**/*.cpp" "src/*.cpp")
 
-add_executable(witcher_senses ${SOURCE})
-target_link_libraries(witcher_senses gl glfw)
+add_executable(witcher_senses ${SOURCE} src/mesh.cpp src/mesh.h)
+target_link_libraries(witcher_senses gl glfw assimp)
