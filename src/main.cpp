@@ -46,6 +46,9 @@ int main() {
   gl::set_debug_log_filters(GL_DONT_CARE, GL_DONT_CARE, {},
                             GL_DEBUG_SEVERITY_NOTIFICATION, false);
 #endif
+
+  gl::set_depth_test_enabled(true);
+
   gl::shader vert_shader(GL_VERTEX_SHADER);
   vert_shader.load_source("../assets/object.vert");
 
@@ -60,9 +63,14 @@ int main() {
   }
   program.use();
 
-  Mesh mesh;
-  mesh.load("../assets/sphere.gltf");
-  mesh.bind();
+  Mesh sphere;
+  sphere.load("../assets/sphere.gltf");
+  glm::mat4 sphere_transform(1.0f);
+  sphere_transform = glm::translate(sphere_transform, glm::vec3(0.0f, 1.0f, 0.0f));
+
+  Mesh plane;
+  plane.load("../assets/plane.gltf");
+  glm::mat4 plane_transform(1.0f);
 
   const glm::vec3 camera_origin(3.0f, 3.0f, -10.0f);
   glm::mat4 view = glm::lookAt(camera_origin, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0));
@@ -73,11 +81,22 @@ int main() {
   auto proj_location = program.uniform_location("proj");
   program.set_uniform(proj_location, proj);
 
+  auto color_location = program.uniform_location("color");
+  auto model_location = program.uniform_location("model");
+
   while (!glfwWindowShouldClose(window)) {
     gl::set_clear_color({0.3, 0.3, 0.3, 1.0});
     gl::clear();
 
-    gl::draw_elements(GL_TRIANGLES, mesh.getIndexCount(), GL_UNSIGNED_INT, nullptr);
+    program.set_uniform(color_location, glm::vec3(0.0, 1.0, 0.0));
+    program.set_uniform(model_location, plane_transform);
+    plane.bind();
+    gl::draw_elements(GL_TRIANGLES, plane.getIndexCount(), GL_UNSIGNED_INT, nullptr);
+
+    program.set_uniform(color_location, glm::vec3(1.0, 0.0, 0.0));
+    program.set_uniform(model_location, sphere_transform);
+    sphere.bind();
+    gl::draw_elements(GL_TRIANGLES, sphere.getIndexCount(), GL_UNSIGNED_INT, nullptr);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
