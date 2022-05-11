@@ -4,8 +4,6 @@
 #include <assimp/postprocess.h>
 #include <assimp/cimport.h>
 
-#include <iostream>
-
 Mesh::Mesh() : vao_(), vertex_buffer_(), index_buffer_() {}
 
 void Mesh::load(const char* path) {
@@ -40,7 +38,6 @@ void Mesh::load(const char* path) {
   const size_t size_indices = sizeof(uint32_t) * indices.size();
   const size_t size_vertices = sizeof(Vertex) * vertices.size();
   index_count_ = indices.size();
-  std::cout << "Index count: " << index_count_ << '\n';
 
   vao_.bind();
   index_buffer_.set_data(size_indices, indices.data());
