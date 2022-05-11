@@ -4,8 +4,6 @@
 #include <assimp/postprocess.h>
 #include <assimp/cimport.h>
 
-Mesh::Mesh() : vao_(), vertex_buffer_(), index_buffer_() {}
-
 void Mesh::load(const char* path) {
   const aiScene* scene = aiImportFile(path, aiProcess_Triangulate);
   if (!scene || !scene->HasMeshes()) {

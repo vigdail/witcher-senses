@@ -139,7 +139,7 @@ int main() {
   auto model_location = program.uniform_location("model");
 
   DirectionalLight directional_light{
-      .direction = glm::vec3(1.0f, 1.0f, 1.0f),
+      .direction = glm::normalize(glm::vec3(1.0f, 1.0f, -1.0f)),
       .intensity = 1.0f,
       .color = glm::vec3(0.5f, 1.0f, 1.0f),
   };

@@ -10,18 +10,15 @@ struct Vertex {
 };
 
 class Mesh {
- public:
-  Mesh();
-  void load(const char* path);
+public:
+  void load(const char *path);
   void bind();
-
- private:
-  gl::vertex_array vao_;
-  gl::buffer vertex_buffer_;
- public:
   uint32_t getIndexCount() const;
- private:
-  gl::buffer index_buffer_;
-  uint32_t index_count_;
+
+private:
+  gl::vertex_array vao_{};
+  gl::buffer vertex_buffer_{};
+  gl::buffer index_buffer_{};
+  uint32_t index_count_{0};
 };
 
