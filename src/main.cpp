@@ -51,6 +51,29 @@ struct DirectionalLight {
 using MeshHandle = std::shared_ptr<Mesh>;
 using World = entt::registry;
 
+struct Shader {
+  gl::program program;
+  std::unordered_map<std::string, int> uniforms{};
+
+  explicit Shader(gl::program &&program) : program{std::move(program)} {}
+
+  void use() const { program.use(); }
+
+  template <class T> void setUniform(const char *name, const T &value) {
+    const auto location = getLocation(name);
+    program.set_uniform(location, value);
+  }
+
+  int getLocation(const char *name) {
+    if (auto it = uniforms.find(name); it != uniforms.end()) {
+      return it->second;
+    }
+    const auto location = program.uniform_location(name);
+    uniforms[name] = location;
+    return location;
+  }
+};
+
 struct Move {
   bool placeholder{};
 };
@@ -96,28 +119,40 @@ void createOffscreenFramebuffer(World &world, int width, int height) {
                                  std::move(depth_stencil));
 }
 
-struct Shader {
-  gl::program program;
-  std::unordered_map<std::string, int> uniforms{};
-
-  explicit Shader(gl::program &&program) : program{std::move(program)} {}
-
-  void use() const { program.use(); }
-
-  template <class T> void setUniform(const char *name, const T &value) {
-    const auto location = getLocation(name);
-    program.set_uniform(location, value);
-  }
-
-  int getLocation(const char *name) {
-    if (auto it = uniforms.find(name); it != uniforms.end()) {
-      return it->second;
-    }
-    const auto location = program.uniform_location(name);
-    uniforms[name] = location;
-    return location;
-  }
+struct Intensity {
+  gl::framebuffer framebuffer;
+  gl::texture_2d color;
+  Shader shader;
 };
+
+void createIntensityFramebuffer(World &world, int width, int height) {
+  gl::texture_2d color;
+  color.set_min_filter(GL_LINEAR);
+  color.set_mag_filter(GL_LINEAR);
+  color.set_wrap_s(GL_REPEAT);
+  color.set_wrap_t(GL_REPEAT);
+  color.set_storage(1, GL_R11F_G11F_B10F, width, height);
+
+  gl::framebuffer framebuffer;
+  framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, color, 0);
+  framebuffer.set_draw_buffer(GL_COLOR_ATTACHMENT0);
+
+  gl::shader vertex(GL_VERTEX_SHADER);
+  vertex.load_source("../assets/intensity.vert");
+  gl::shader fragment(GL_FRAGMENT_SHADER);
+  fragment.load_source("../assets/intensity.frag");
+
+  gl::program program;
+  program.attach_shader(vertex);
+  program.attach_shader(fragment);
+  if (!program.link()) {
+    std::cerr << "Not linked: " << program.info_log() << '\n';
+    exit(EXIT_FAILURE);
+  }
+
+  world.ctx().emplace<Intensity>(std::move(framebuffer), std::move(color),
+                                 Shader(std::move(program)));
+}
 
 int main() {
   glfwSetErrorCallback([](int error, const char *description) {
@@ -192,8 +227,13 @@ int main() {
   light_ubo.bind_base(GL_UNIFORM_BUFFER, 0);
 
   createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
+  createIntensityFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+  gl::vertex_array quad_vao;
 
   while (!glfwWindowShouldClose(window)) {
+    moveSphereSystem(world);
+
     const auto &offscreen = world.ctx().at<const Offscreen>();
     offscreen.framebuffer.bind();
     gl::set_clear_color({0.3, 0.3, 0.3, 1.0});
@@ -205,7 +245,9 @@ int main() {
 
     gl::set_stencil_mask(0xff);
     gl::set_stencil_operation(GL_KEEP, GL_KEEP, GL_REPLACE);
+    object_shader.use();
 
+    gl::set_stencil_function(GL_ALWAYS, 0x00, 0xff);
     world.view<Transform, MeshHandle, Color>().each(
         [&](auto entity, const auto &transform, const auto &mesh,
             const auto &color) {
@@ -221,11 +263,27 @@ int main() {
           gl::draw_elements(GL_TRIANGLES, mesh->getIndexCount(),
                             GL_UNSIGNED_INT, nullptr);
         });
-    moveSphereSystem(world);
 
-    offscreen.framebuffer.bind(GL_READ_FRAMEBUFFER);
+    gl::set_depth_test_enabled(false);
+    gl::set_stencil_operation(GL_KEEP, GL_KEEP, GL_KEEP);
+    auto &intensity = world.ctx().at<Intensity>();
+    intensity.framebuffer.bind();
+    intensity.framebuffer.attach_texture(GL_DEPTH_STENCIL_ATTACHMENT,
+                                         offscreen.depth_stencil, 0);
+    gl::clear(GL_COLOR_BUFFER_BIT);
+    intensity.shader.use();
+    intensity.shader.setUniform("color", glm::vec3(1.0, 0.0, 0.0));
+    gl::set_stencil_mask(0xFF);
+    gl::set_stencil_function(GL_LESS, 0x00, 0x04);
+    quad_vao.bind();
+    gl::draw_arrays(GL_TRIANGLES, 0, 6);
+    intensity.shader.setUniform("color", glm::vec3(0.0, 1.0, 0.0));
+    gl::set_stencil_function(GL_LESS, 0x00, 0x08);
+    gl::draw_arrays(GL_TRIANGLES, 0, 6);
+
+    intensity.framebuffer.bind(GL_READ_FRAMEBUFFER);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitNamedFramebuffer(offscreen.framebuffer.id(), 0, 0, 0, WINDOW_WIDTH,
+    glBlitNamedFramebuffer(intensity.framebuffer.id(), 0, 0, 0, WINDOW_WIDTH,
                            WINDOW_HEIGHT, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
                            GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
