@@ -154,6 +154,41 @@ void createIntensityFramebuffer(World &world, int width, int height) {
                                  Shader(std::move(program)));
 }
 
+struct Outline {
+  gl::framebuffer framebuffer;
+  gl::texture_2d color;
+  Shader shader;
+};
+
+void createOutline(World &world) {
+  gl::texture_2d color;
+  color.set_min_filter(GL_LINEAR);
+  color.set_mag_filter(GL_LINEAR);
+  color.set_wrap_s(GL_REPEAT);
+  color.set_wrap_t(GL_REPEAT);
+  color.set_storage(1, GL_RG16F, 512, 512);
+
+  gl::framebuffer framebuffer;
+  framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, color, 0);
+  framebuffer.set_draw_buffer(GL_COLOR_ATTACHMENT0);
+
+  gl::shader vertex(GL_VERTEX_SHADER);
+  vertex.load_source("../assets/outline.vert");
+  gl::shader fragment(GL_FRAGMENT_SHADER);
+  fragment.load_source("../assets/outline.frag");
+
+  gl::program program;
+  program.attach_shader(vertex);
+  program.attach_shader(fragment);
+  if (!program.link()) {
+    std::cerr << "Not linked: " << program.info_log() << '\n';
+    exit(EXIT_FAILURE);
+  }
+
+  world.ctx().emplace<Outline>(std::move(framebuffer), std::move(color),
+                               Shader(std::move(program)));
+}
+
 int main() {
   glfwSetErrorCallback([](int error, const char *description) {
     std::cerr << "Error: " << description << '\n';
@@ -228,6 +263,7 @@ int main() {
 
   createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
   createIntensityFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
+  createOutline(world);
 
   gl::vertex_array quad_vao;
 
@@ -236,6 +272,7 @@ int main() {
 
     const auto &offscreen = world.ctx().at<const Offscreen>();
     offscreen.framebuffer.bind();
+    gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
     gl::set_clear_color({0.3, 0.3, 0.3, 1.0});
     gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
               GL_STENCIL_BUFFER_BIT);
@@ -270,6 +307,8 @@ int main() {
     intensity.framebuffer.bind();
     intensity.framebuffer.attach_texture(GL_DEPTH_STENCIL_ATTACHMENT,
                                          offscreen.depth_stencil, 0);
+
+    gl::set_clear_color({0.0, 0.0, 0.0, 1.0});
     gl::clear(GL_COLOR_BUFFER_BIT);
     intensity.shader.use();
     intensity.shader.setUniform("color", glm::vec3(1.0, 0.0, 0.0));
@@ -281,11 +320,20 @@ int main() {
     gl::set_stencil_function(GL_LESS, 0x00, 0x08);
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
-    intensity.framebuffer.bind(GL_READ_FRAMEBUFFER);
+    gl::set_stencil_test_enabled(false);
+    auto &outline = world.ctx().at<Outline>();
+    outline.framebuffer.bind();
+    outline.shader.use();
+    gl::set_viewport({0, 0}, {512, 512});
+    intensity.color.bind_unit(0);
+    gl::clear(GL_COLOR_BUFFER_BIT);
+    gl::draw_arrays(GL_TRIANGLES, 0, 6);
+
+    outline.framebuffer.bind(GL_READ_FRAMEBUFFER);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitNamedFramebuffer(intensity.framebuffer.id(), 0, 0, 0, WINDOW_WIDTH,
-                           WINDOW_HEIGHT, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
-                           GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
+    glBlitNamedFramebuffer(outline.framebuffer.id(), 0, 0, 0, 512, 512, 0, 0,
+                           512, 512, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
