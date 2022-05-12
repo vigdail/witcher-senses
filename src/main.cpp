@@ -154,22 +154,50 @@ void createIntensityFramebuffer(World &world, int width, int height) {
                                  Shader(std::move(program)));
 }
 
+class PingPong {
+ public:
+  PingPong(std::array<gl::texture_2d, 2>&& textures) : textures_{std::move(textures)} {}
+
+  void swap() {
+    current_index_ = 1 - current_index_;
+  }
+
+  const gl::texture_2d& current() const {
+    return textures_[current_index_];
+  }
+
+  const gl::texture_2d& next() const {
+    return textures_[1 - current_index_];
+  }
+
+ private:
+  std::array<gl::texture_2d, 2> textures_;
+  uint32_t current_index_ = 0;
+};
+
 struct Outline {
   gl::framebuffer framebuffer;
-  gl::texture_2d color;
+  PingPong textures;
   Shader shader;
 };
 
-void createOutline(World &world) {
-  gl::texture_2d color;
-  color.set_min_filter(GL_LINEAR);
-  color.set_mag_filter(GL_LINEAR);
-  color.set_wrap_s(GL_REPEAT);
-  color.set_wrap_t(GL_REPEAT);
-  color.set_storage(1, GL_RG16F, 512, 512);
+void createOutline(World& world) {
+  gl::texture_2d color_1;
+  color_1.set_min_filter(GL_LINEAR);
+  color_1.set_mag_filter(GL_LINEAR);
+  color_1.set_wrap_s(GL_REPEAT);
+  color_1.set_wrap_t(GL_REPEAT);
+  color_1.set_storage(1, GL_RG16F, 512, 512);
+
+  gl::texture_2d color_2;
+  color_2.set_min_filter(GL_LINEAR);
+  color_2.set_mag_filter(GL_LINEAR);
+  color_2.set_wrap_s(GL_REPEAT);
+  color_2.set_wrap_t(GL_REPEAT);
+  color_2.set_storage(1, GL_RG16F, 512, 512);
 
   gl::framebuffer framebuffer;
-  framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, color, 0);
+  framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, color_1, 0);
   framebuffer.set_draw_buffer(GL_COLOR_ATTACHMENT0);
 
   gl::shader vertex(GL_VERTEX_SHADER);
@@ -185,7 +213,7 @@ void createOutline(World &world) {
     exit(EXIT_FAILURE);
   }
 
-  world.ctx().emplace<Outline>(std::move(framebuffer), std::move(color),
+  world.ctx().emplace<Outline>(std::move(framebuffer), PingPong({std::move(color_1), std::move(color_2)}),
                                Shader(std::move(program)));
 }
 
@@ -321,11 +349,16 @@ int main() {
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
     gl::set_stencil_test_enabled(false);
-    auto &outline = world.ctx().at<Outline>();
+    auto& outline = world.ctx().at<Outline>();
     outline.framebuffer.bind();
+    outline.framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, outline.textures.current());
     outline.shader.use();
+    outline.shader.setUniform("intensity_map", 0);
+    outline.shader.setUniform("outline_map", 1);
+    outline.shader.setUniform("time", (float)glfwGetTime());
     gl::set_viewport({0, 0}, {512, 512});
     intensity.color.bind_unit(0);
+    outline.textures.next().bind_unit(1);
     gl::clear(GL_COLOR_BUFFER_BIT);
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
@@ -336,6 +369,7 @@ int main() {
                            512, 512, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    outline.textures.swap();
 
     glfwSwapBuffers(window);
     glfwPollEvents();
