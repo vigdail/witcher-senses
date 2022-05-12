@@ -10,12 +10,13 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 constexpr int WINDOW_WIDTH = 1280;
 constexpr int WINDOW_HEIGHT = 720;
 
-void debugMessageCallback(gl::debug_log log) {
+void debugMessageCallback(const gl::debug_log &log) {
   std::cerr << log.message << std::endl;
 }
 
@@ -54,10 +55,41 @@ struct Move {
   bool placeholder{};
 };
 
+void spawnScene(World &world);
 void moveSphereSystem(World &world) {
   world.view<Transform, Move>().each([&](Transform &transform, const Move &m) {
-    transform.translation.x = 5.0 * sin(glfwGetTime());
+    transform.translation.x = 5.0f * float(sin(glfwGetTime()));
   });
+}
+
+struct Offscreen {
+  gl::framebuffer framebuffer;
+  gl::texture_2d color;
+  gl::texture_2d depth_stencil;
+};
+
+void createOffscreenFramebuffer(World &world, int width, int height) {
+  gl::texture_2d color;
+  color.set_min_filter(GL_LINEAR);
+  color.set_mag_filter(GL_LINEAR);
+  color.set_wrap_s(GL_REPEAT);
+  color.set_wrap_t(GL_REPEAT);
+  color.set_storage(1, GL_RGBA8, width, height);
+
+  gl::texture_2d depth_stencil;
+  depth_stencil.set_min_filter(GL_LINEAR);
+  depth_stencil.set_mag_filter(GL_LINEAR);
+  depth_stencil.set_wrap_s(GL_REPEAT);
+  depth_stencil.set_wrap_t(GL_REPEAT);
+  depth_stencil.set_storage(1, GL_DEPTH24_STENCIL8, width, height);
+
+  gl::framebuffer framebuffer;
+  framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, color, 0);
+  framebuffer.attach_texture(GL_DEPTH_ATTACHMENT, depth_stencil, 0);
+  framebuffer.set_draw_buffer(GL_COLOR_ATTACHMENT0);
+
+  world.ctx().emplace<Offscreen>(std::move(framebuffer), std::move(color),
+                                 std::move(depth_stencil));
 }
 
 int main() {
@@ -109,20 +141,7 @@ int main() {
   }
   program.use();
 
-  auto sphere_mesh = std::make_shared<Mesh>();
-  sphere_mesh->load("../assets/sphere.gltf");
-  auto sphere = world.create();
-  world.emplace<MeshHandle>(sphere, sphere_mesh);
-  world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
-  world.emplace<Color>(sphere, Color{glm::vec3(1.0f, 0.0f, 0.0f)});
-  world.emplace<Move>(sphere, Move{});
-
-  auto plane_mesh = std::make_shared<Mesh>();
-  plane_mesh->load("../assets/plane.gltf");
-  auto plane = world.create();
-  world.emplace<MeshHandle>(plane, plane_mesh);
-  world.emplace<Transform>(plane, Transform{});
-  world.emplace<Color>(plane, Color{glm::vec3(0.0f, 1.0f, 0.0f)});
+  spawnScene(world);
 
   const glm::vec3 camera_origin(3.0f, 3.0f, -10.0f);
   glm::mat4 view =
@@ -141,14 +160,18 @@ int main() {
   DirectionalLight directional_light{
       .direction = glm::normalize(glm::vec3(1.0f, 1.0f, -1.0f)),
       .intensity = 1.0f,
-      .color = glm::vec3(0.5f, 1.0f, 1.0f),
+      .color = glm::vec3(1.0f, 1.0f, 1.0f),
   };
 
   gl::buffer light_ubo;
   light_ubo.set_data(sizeof(DirectionalLight), &directional_light);
   light_ubo.bind_base(GL_UNIFORM_BUFFER, 0);
 
+  createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
+
   while (!glfwWindowShouldClose(window)) {
+    const auto &offscreen = world.ctx().at<const Offscreen>();
+    offscreen.framebuffer.bind();
     gl::set_clear_color({0.3, 0.3, 0.3, 1.0});
     gl::clear();
 
@@ -162,6 +185,15 @@ int main() {
         });
     moveSphereSystem(world);
 
+    offscreen.framebuffer.bind(GL_READ_FRAMEBUFFER);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitNamedFramebuffer(offscreen.framebuffer.id(), 0, 0, 0, WINDOW_WIDTH,
+                           WINDOW_HEIGHT, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
+                           GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT,
+                           GL_NEAREST);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     glfwSwapBuffers(window);
     glfwPollEvents();
   }
@@ -170,4 +202,28 @@ int main() {
   glfwTerminate();
 
   return 0;
+}
+
+void spawnScene(World &world) {
+  auto sphere_mesh = std::make_shared<Mesh>();
+  sphere_mesh->load("../assets/sphere.gltf");
+  auto sphere = world.create();
+  world.emplace<MeshHandle>(sphere, sphere_mesh);
+  world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
+  world.emplace<Color>(sphere, Color{glm::vec3(0.5f, 0.6f, 0.3f)});
+  world.emplace<Move>(sphere, Move{});
+
+  auto cube_mesh = std::make_shared<Mesh>();
+  cube_mesh->load("../assets/cube.gltf");
+  auto cube = world.create();
+  world.emplace<MeshHandle>(cube, cube_mesh);
+  world.emplace<Transform>(cube, Transform({-2.0f, 1.0f, -2.0}));
+  world.emplace<Color>(cube, Color{glm::vec3(1.0f, 0.6f, 0.5f)});
+
+  auto plane_mesh = std::make_shared<Mesh>();
+  plane_mesh->load("../assets/plane.gltf");
+  auto plane = world.create();
+  world.emplace<MeshHandle>(plane, plane_mesh);
+  world.emplace<Transform>(plane, Transform{});
+  world.emplace<Color>(plane, Color{glm::vec3(0.3f, 0.6f, 0.7f)});
 }
