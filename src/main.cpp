@@ -61,6 +61,9 @@ struct Shader {
 
   template <class T> void setUniform(const char *name, const T &value) {
     const auto location = getLocation(name);
+    if (location < 0) {
+      std::cerr << "Bad uniform location: " << name << '\n';
+    }
     program.set_uniform(location, value);
   }
 
@@ -155,22 +158,17 @@ void createIntensityFramebuffer(World &world, int width, int height) {
 }
 
 class PingPong {
- public:
-  PingPong(std::array<gl::texture_2d, 2>&& textures) : textures_{std::move(textures)} {}
+public:
+  PingPong(std::array<gl::texture_2d, 2> &&textures)
+      : textures_{std::move(textures)} {}
 
-  void swap() {
-    current_index_ = 1 - current_index_;
-  }
+  void swap() { current_index_ = 1 - current_index_; }
 
-  const gl::texture_2d& current() const {
-    return textures_[current_index_];
-  }
+  const gl::texture_2d &current() const { return textures_[current_index_]; }
 
-  const gl::texture_2d& next() const {
-    return textures_[1 - current_index_];
-  }
+  const gl::texture_2d &next() const { return textures_[1 - current_index_]; }
 
- private:
+private:
   std::array<gl::texture_2d, 2> textures_;
   uint32_t current_index_ = 0;
 };
@@ -181,7 +179,7 @@ struct Outline {
   Shader shader;
 };
 
-void createOutline(World& world) {
+void createOutline(World &world) {
   gl::texture_2d color_1;
   color_1.set_min_filter(GL_LINEAR);
   color_1.set_mag_filter(GL_LINEAR);
@@ -213,8 +211,13 @@ void createOutline(World& world) {
     exit(EXIT_FAILURE);
   }
 
-  world.ctx().emplace<Outline>(std::move(framebuffer), PingPong({std::move(color_1), std::move(color_2)}),
-                               Shader(std::move(program)));
+  Shader shader(std::move(program));
+  shader.setUniform("intensity_map", 0);
+  shader.setUniform("outline_map", 1);
+
+  world.ctx().emplace<Outline>(
+      std::move(framebuffer),
+      PingPong({std::move(color_1), std::move(color_2)}), std::move(shader));
 }
 
 int main() {
@@ -250,12 +253,12 @@ int main() {
 
   entt::registry world;
 
-  auto create_object_shader = [&]() {
+  auto create_shader = [&](const char *vert_path, const char *frag_path) {
     gl::shader vert_shader(GL_VERTEX_SHADER);
-    vert_shader.load_source("../assets/object.vert");
+    vert_shader.load_source(vert_path);
 
     gl::shader frag_shader(GL_FRAGMENT_SHADER);
-    frag_shader.load_source("../assets/object.frag");
+    frag_shader.load_source(frag_path);
 
     gl::program program;
     program.attach_shader(vert_shader);
@@ -265,7 +268,8 @@ int main() {
     }
     return Shader(std::move(program));
   };
-  Shader object_shader = create_object_shader();
+  Shader object_shader =
+      create_shader("../assets/object.vert", "../assets/object.frag");
   object_shader.use();
 
   spawnScene(world);
@@ -292,6 +296,15 @@ int main() {
   createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
   createIntensityFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
   createOutline(world);
+
+  glm::vec2 texture_size((float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
+  Shader compose_shader =
+      create_shader("../assets/compose.vert", "../assets/compose.frag");
+  compose_shader.use();
+  compose_shader.setUniform("color_map", 0);
+  compose_shader.setUniform("outline_map", 1);
+  compose_shader.setUniform("intensity_map", 2);
+  compose_shader.setUniform("texture_size", texture_size);
 
   gl::vertex_array quad_vao;
 
@@ -349,12 +362,11 @@ int main() {
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
     gl::set_stencil_test_enabled(false);
-    auto& outline = world.ctx().at<Outline>();
+    auto &outline = world.ctx().at<Outline>();
     outline.framebuffer.bind();
-    outline.framebuffer.attach_texture(GL_COLOR_ATTACHMENT0, outline.textures.current());
+    outline.framebuffer.attach_texture(GL_COLOR_ATTACHMENT0,
+                                       outline.textures.current());
     outline.shader.use();
-    outline.shader.setUniform("intensity_map", 0);
-    outline.shader.setUniform("outline_map", 1);
     outline.shader.setUniform("time", (float)glfwGetTime());
     gl::set_viewport({0, 0}, {512, 512});
     intensity.color.bind_unit(0);
@@ -362,13 +374,16 @@ int main() {
     gl::clear(GL_COLOR_BUFFER_BIT);
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
-    outline.framebuffer.bind(GL_READ_FRAMEBUFFER);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
-    glBlitNamedFramebuffer(outline.framebuffer.id(), 0, 0, 0, 512, 512, 0, 0,
-                           512, 512, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
+    compose_shader.use();
+    compose_shader.setUniform("time", (float)glfwGetTime());
+    offscreen.color.bind_unit(0);
+    outline.textures.current().bind_unit(1);
+    intensity.color.bind_unit(2);
+    gl::clear(GL_COLOR_BUFFER_BIT);
+    gl::draw_arrays(GL_TRIANGLES, 0, 6);
+
     outline.textures.swap();
 
     glfwSwapBuffers(window);
@@ -389,7 +404,7 @@ void spawnScene(World &world) {
   world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
   world.emplace<Color>(sphere, Color{glm::vec3(0.5f, 0.6f, 0.3f)});
   world.emplace<Move>(sphere, Move{});
-  world.emplace<Stencil>(sphere, Stencil{4});
+  world.emplace<Stencil>(sphere, Stencil{8});
 
   auto cube_mesh = std::make_shared<Mesh>();
   cube_mesh->load("../assets/cube.gltf");
@@ -397,7 +412,7 @@ void spawnScene(World &world) {
   world.emplace<MeshHandle>(cube, cube_mesh);
   world.emplace<Transform>(cube, Transform({-2.0f, 1.0f, -2.0}));
   world.emplace<Color>(cube, Color{glm::vec3(1.0f, 0.6f, 0.5f)});
-  world.emplace<Stencil>(cube, Stencil{8});
+  world.emplace<Stencil>(cube, Stencil{4});
 
   auto plane_mesh = std::make_shared<Mesh>();
   plane_mesh->load("../assets/plane.gltf");
