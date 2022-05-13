@@ -5,7 +5,6 @@
 #include <GLFW/glfw3.h>
 #include <entt/entt.hpp>
 #include <gl/all.hpp>
-#include <gl/auxiliary/glm_uniforms.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -15,10 +14,10 @@
 #include <optional>
 #include <vector>
 
-constexpr int WINDOW_WIDTH = 1600;
-constexpr int WINDOW_HEIGHT = 900;
+constexpr int WINDOW_WIDTH = 1280;
+constexpr int WINDOW_HEIGHT = 720;
 
-void debugMessageCallback(const gl::debug_log &log) {
+void debugMessageCallback(const gl::debug_log& log) {
   std::cerr << log.message << std::endl;
 }
 
@@ -546,7 +545,6 @@ void spawnScene(World &world) {
   world.emplace<MeshHandle>(sphere, sphere_mesh);
   world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
   world.emplace<Color>(sphere, Color{glm::vec3(0.5f, 0.6f, 0.3f)});
-  //  world.emplace<Move>(sphere, Move{});
   world.emplace<Trace>(sphere);
 
   auto sphere_2 = world.create();
@@ -561,6 +559,13 @@ void spawnScene(World &world) {
   world.emplace<Transform>(cube, Transform({-2.0f, 1.0f, -2.0}));
   world.emplace<Color>(cube, Color{glm::vec3(1.0f, 0.6f, 0.5f)});
   world.emplace<Interesting>(cube);
+
+  auto sphere_3 = world.create();
+  Transform transform({1.5f, 0.5f, -2.5f});
+  transform.scale = glm::vec3(0.5f);
+  world.emplace<MeshHandle>(sphere_3, sphere_mesh);
+  world.emplace<Transform>(sphere_3, transform);
+  world.emplace<Color>(sphere_3, Color{glm::vec3(0.0f, 0.6f, 0.5f)});
 
   auto plane_mesh = std::make_shared<Mesh>();
   plane_mesh->load("../assets/plane.gltf");

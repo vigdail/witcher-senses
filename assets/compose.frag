@@ -20,7 +20,7 @@ void main() {
 
     // Colors of witcher senses
     vec3 color_interesting = vec3(1.0, 0.8, 0.4);
-    vec3 color_traces = vec3(0.9, 0.0, 0.0);
+    vec3 color_traces = vec3(1.0, 0.0, 0.0);
 
     // Was always set to vec2(0.0, 0.0).
     // Setting this to higher values
@@ -72,7 +72,6 @@ void main() {
 
         float attenuation = fisheye_amount * 0.1;
         uv4 *= attenuation;
-        frag_color = vec4(uv4, 0.0, 1.0);
 
         offset_uv = clamp(uv4, vec2(-0.4, -0.4), vec2(0.4, 0.4));
         offset_uv *= zoom_amount;
@@ -121,15 +120,15 @@ void main() {
 
     vec2 intensity = texture(intensity_map, color_uv).xy;
 
-    float intensityInteresting = intensity.r;
-    float intensityTraces = intensity.g;
+    float intensity_interesting = intensity.r;
+    float intensity_traces = intensity.g;
 
-    float main_outline_interesting = clamp(outline_interesting - 0.8*intensityInteresting, 0.0, 1.0);
-    float main_outline_traces = clamp(outline_traces - 0.75*intensityTraces, 0.0, 1.0);
+    float main_outline_interesting = clamp(outline_interesting - 0.8*intensity_interesting, 0.0, 1.0);
+    float main_outline_traces = clamp(outline_traces - 0.75*intensity_traces, 0.0, 1.0);
 
     vec3 color_greyish = dot(color_circle_main, vec3(0.3, 0.3, 0.3)).xxx;
 
-    vec3 main_color = mix(color_greyish, color_circle_main, mask_gray_corners) * 0.6;
+    vec3 main_color = mix(color_greyish, color_circle_main, mask_gray_corners) * 0.7;
 
     main_color = mix(color, main_color, fisheye_amount);
 
@@ -138,7 +137,7 @@ void main() {
 
     vec3 senses_total = 1.2 * senses_traces + senses_interesting;
 
-    vec3 senses_total_sat = clamp(senses_total, vec3(0.0), vec3(1.0));
+    vec3 senses_total_sat = clamp(1.2 * senses_total, vec3(0.0), vec3(1.0));
     float dot_senses_total = clamp(dot(senses_total, vec3(1.0, 1.0, 1.0)), 0.0, 1.0) * zoom_amount;
 
     vec3 final_color = mix(main_color, senses_total_sat, dot_senses_total);

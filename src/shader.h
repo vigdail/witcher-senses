@@ -1,5 +1,6 @@
 #pragma once
 
+#include <gl/auxiliary/glm_uniforms.hpp>
 #include <gl/program.hpp>
 
 #include <unordered_map>

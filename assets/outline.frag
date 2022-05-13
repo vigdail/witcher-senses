@@ -92,7 +92,7 @@ void main() {
 
     vec2 final_outline = vec2(last_outlines.x + new_outline, new_outline);
 
-    float damping_param = 0.5;
+    float damping_param = 0.1;
     damping_param = pow(damping_param, 100);
     float damping = 0.7 + 0.16 * damping_param;
 
