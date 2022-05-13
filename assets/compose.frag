@@ -44,7 +44,7 @@ void main() {
         new_uv = clamp(new_uv / 1.8, 0.0, 1.0);
         new_uv = pow(new_uv, vec2(2.5));
 
-        mask_gray_corners = 1-min(1.0, length(new_uv));
+        mask_gray_corners = 1.0 - min(1.0, length(new_uv));
     }
 
     // circle radius used further

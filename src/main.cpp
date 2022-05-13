@@ -13,8 +13,8 @@
 #include <optional>
 #include <vector>
 
-constexpr int WINDOW_WIDTH = 1280;
-constexpr int WINDOW_HEIGHT = 720;
+constexpr int WINDOW_WIDTH = 1600;
+constexpr int WINDOW_HEIGHT = 900;
 
 void debugMessageCallback(const gl::debug_log &log) {
   std::cerr << log.message << std::endl;
@@ -77,18 +77,14 @@ struct Shader {
   }
 };
 
-struct Move {
-  bool placeholder{};
-};
-
-struct Stencil {
-  int value;
-};
+struct Move {};
+struct Trace {};
+struct Interesting {};
 
 void spawnScene(World &world);
 void moveSphereSystem(World &world) {
-  world.view<Transform, Move>().each([&](Transform &transform, const Move &m) {
-    transform.translation.x = 5.0f * float(sin(glfwGetTime()));
+  world.view<Transform, Move>().each([&](Transform &transform) {
+    transform.translation.x = 5.0f * float(sin(glfwGetTime() / 1.14));
   });
 }
 
@@ -326,14 +322,19 @@ int main() {
     object_shader.use();
 
     gl::set_stencil_function(GL_ALWAYS, 0x00, 0xff);
+    auto traces = world.view<Trace>();
+    auto interesting = world.view<Interesting>();
     world.view<Transform, MeshHandle, Color>().each(
         [&](auto entity, const auto &transform, const auto &mesh,
             const auto &color) {
           object_shader.setUniform("color", color.color);
           object_shader.setUniform("model", transform.transform());
           mesh->bind();
-          if (auto *s = world.try_get<Stencil>(entity); s) {
-            gl::set_stencil_function(GL_ALWAYS, s->value, 0xff);
+          if (traces.contains(entity)) {
+            gl::set_stencil_function(GL_ALWAYS, 0x8, 0xff);
+            gl::set_stencil_mask(0xff);
+          } else if (interesting.contains(entity)) {
+            gl::set_stencil_function(GL_ALWAYS, 0x4, 0xff);
             gl::set_stencil_mask(0xff);
           } else {
             gl::set_stencil_mask(0x00);
@@ -404,7 +405,12 @@ void spawnScene(World &world) {
   world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
   world.emplace<Color>(sphere, Color{glm::vec3(0.5f, 0.6f, 0.3f)});
   world.emplace<Move>(sphere, Move{});
-  world.emplace<Stencil>(sphere, Stencil{8});
+  world.emplace<Trace>(sphere);
+
+  auto sphere_2 = world.create();
+  world.emplace<MeshHandle>(sphere_2, sphere_mesh);
+  world.emplace<Transform>(sphere_2, Transform({-1.0f, 1.0f, 2.0}));
+  world.emplace<Color>(sphere_2, Color{glm::vec3(0.2f, 0.2f, 0.4f)});
 
   auto cube_mesh = std::make_shared<Mesh>();
   cube_mesh->load("../assets/cube.gltf");
@@ -412,12 +418,14 @@ void spawnScene(World &world) {
   world.emplace<MeshHandle>(cube, cube_mesh);
   world.emplace<Transform>(cube, Transform({-2.0f, 1.0f, -2.0}));
   world.emplace<Color>(cube, Color{glm::vec3(1.0f, 0.6f, 0.5f)});
-  world.emplace<Stencil>(cube, Stencil{4});
+  world.emplace<Interesting>(cube);
 
   auto plane_mesh = std::make_shared<Mesh>();
   plane_mesh->load("../assets/plane.gltf");
   auto plane = world.create();
+  Transform plane_transform{};
+  plane_transform.scale = glm::vec3(2.0f, 1.0f, 2.0f);
   world.emplace<MeshHandle>(plane, plane_mesh);
-  world.emplace<Transform>(plane, Transform{});
+  world.emplace<Transform>(plane, plane_transform);
   world.emplace<Color>(plane, Color{glm::vec3(0.3f, 0.6f, 0.7f)});
 }
