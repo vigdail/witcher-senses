@@ -216,6 +216,88 @@ void createOutline(World &world) {
       PingPong({std::move(color_1), std::move(color_2)}), std::move(shader));
 }
 
+struct Input {
+  float horizontal{};
+  float vertical{};
+  glm::vec2 mouse_pos{};
+  glm::vec2 mouse_delta{};
+  bool left_mouse{};
+  bool right_mouse{};
+};
+
+void cursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
+  auto *world = static_cast<World *>(glfwGetWindowUserPointer(window));
+  auto &input = world->ctx().at<Input>();
+  auto &last_pos = input.mouse_pos;
+  glm::vec2 new_pos((float)xpos, (float)ypos);
+  input.mouse_delta = new_pos - last_pos;
+  input.mouse_pos = new_pos;
+}
+
+void mouseButtonCallback(GLFWwindow *window, int button, int action, int mode) {
+  auto *world = static_cast<World *>(glfwGetWindowUserPointer(window));
+  auto &input = world->ctx().at<Input>();
+  if (action == GLFW_PRESS) {
+    if (button == GLFW_MOUSE_BUTTON_1) {
+      input.left_mouse = true;
+    } else if (button == GLFW_MOUSE_BUTTON_2) {
+      input.right_mouse = true;
+    }
+  } else if (action == GLFW_RELEASE) {
+    if (button == GLFW_MOUSE_BUTTON_1) {
+      input.left_mouse = false;
+    } else if (button == GLFW_MOUSE_BUTTON_2) {
+      input.right_mouse = false;
+    }
+  }
+}
+
+void keyboardCallback(GLFWwindow *window, int key, int scancode, int action,
+                      int mods) {
+  auto *world = static_cast<World *>(glfwGetWindowUserPointer(window));
+  auto &input = world->ctx().at<Input>();
+  if (action == GLFW_PRESS) {
+    switch (key) {
+    case GLFW_KEY_W:
+      input.vertical += 1.0f;
+      break;
+    case GLFW_KEY_S:
+      input.vertical -= 1.0f;
+      break;
+    case GLFW_KEY_A:
+      input.horizontal -= 1.0f;
+      break;
+    case GLFW_KEY_D:
+      input.horizontal += 1.0f;
+      break;
+    default:
+      break;
+    }
+  } else if (action == GLFW_RELEASE) {
+    switch (key) {
+    case GLFW_KEY_W:
+      input.vertical -= 1.0f;
+      break;
+    case GLFW_KEY_S:
+      input.vertical += 1.0f;
+      break;
+    case GLFW_KEY_A:
+      input.horizontal += 1.0f;
+      break;
+    case GLFW_KEY_D:
+      input.horizontal -= 1.0f;
+      break;
+    default:
+      break;
+    }
+  }
+}
+
+void resetMouseDelta(World &world) {
+  auto &input = world.ctx().at<Input>();
+  input.mouse_delta = glm::vec2(0.0f);
+}
+
 int main() {
   glfwSetErrorCallback([](int error, const char *description) {
     std::cerr << "Error: " << description << '\n';
@@ -248,6 +330,12 @@ int main() {
 #endif
 
   entt::registry world;
+  world.ctx().emplace<Input>();
+
+  glfwSetWindowUserPointer(window, &world);
+  glfwSetCursorPosCallback(window, cursorPosCallback);
+  glfwSetMouseButtonCallback(window, mouseButtonCallback);
+  glfwSetKeyCallback(window, keyboardCallback);
 
   auto create_shader = [&](const char *vert_path, const char *frag_path) {
     gl::shader vert_shader(GL_VERTEX_SHADER);
@@ -389,6 +477,8 @@ int main() {
 
     glfwSwapBuffers(window);
     glfwPollEvents();
+
+    resetMouseDelta(world);
   }
 
   glfwDestroyWindow(window);

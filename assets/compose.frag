@@ -13,15 +13,15 @@ const float PI = 3.1415;
 const float PI_4 = PI / 4.0;
 
 void main() {
-    float zoom_amount = (sin(time) + 1.0) / 2.0;// 1.0;
+    float zoom_amount = (cos(time) + 1.0) / 2.0;
 
     // Another value which affect fisheye effect
     // but always set to vec2(1.0, 1.0).
     vec2 amount = vec2(1.0, 1.0);// cb0_v2.zw;
 
     // Colors of witcher senses
-    vec3 color_interesting = vec3(1.0, 0.8, 0.4);// cb3_v5.rgb;
-    vec3 color_traces = vec3(0.9, 0.0, 0.0);// cb3_v4.rgb;
+    vec3 color_interesting = vec3(1.0, 0.8, 0.4);
+    vec3 color_traces = vec3(0.9, 0.0, 0.0);
 
     // Was always set to vec2(0.0, 0.0).
     // Setting this to higher values
@@ -29,7 +29,7 @@ void main() {
     vec2 offset = vec2(0.0, 0.0);// cb3_v2.xy;
 
     // Main value which causes fisheye effect [0-1]
-    const float fisheye_amount = zoom_amount;// 1.0;
+    const float fisheye_amount = zoom_amount;
 
     // Scale at first from [0-1] to [-1;1], then calculate abs
     vec2 uv3 = abs(uv * 2.0 - 1.0);
@@ -58,7 +58,7 @@ void main() {
         cor += corners1.x;
         cor += corners1.y;
 
-        circle_radius = clamp(cor * 20.0, 0.0, 1.0);// r0.x, line 21
+        circle_radius = clamp(cor * 20.0, 0.0, 1.0);
     }
 
     // * Zooming effect
