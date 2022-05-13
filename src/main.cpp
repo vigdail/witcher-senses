@@ -138,8 +138,14 @@ void createIntensityFramebuffer(World &world, int width, int height) {
 
   gl::shader vertex(GL_VERTEX_SHADER);
   vertex.load_source("../assets/intensity.vert");
+  if (!vertex.compile()) {
+    std::cerr << "Shader compilation error: " << vertex.info_log() << '\n';
+  }
   gl::shader fragment(GL_FRAGMENT_SHADER);
   fragment.load_source("../assets/intensity.frag");
+  if (!fragment.compile()) {
+    std::cerr << "Shader compilation error: " << fragment.info_log() << '\n';
+  }
 
   gl::program program;
   program.attach_shader(vertex);
@@ -196,8 +202,14 @@ void createOutline(World &world) {
 
   gl::shader vertex(GL_VERTEX_SHADER);
   vertex.load_source("../assets/outline.vert");
+  if (!vertex.compile()) {
+    std::cerr << "Shader compilation error: " << vertex.info_log() << '\n';
+  }
   gl::shader fragment(GL_FRAGMENT_SHADER);
   fragment.load_source("../assets/outline.frag");
+  if (!fragment.compile()) {
+    std::cerr << "Shader compilation error: " << fragment.info_log() << '\n';
+  }
 
   gl::program program;
   program.attach_shader(vertex);
@@ -340,9 +352,17 @@ int main() {
   auto create_shader = [&](const char *vert_path, const char *frag_path) {
     gl::shader vert_shader(GL_VERTEX_SHADER);
     vert_shader.load_source(vert_path);
+    if (!vert_shader.compile()) {
+      std::cerr << "Shader compilation error: " << vert_shader.info_log()
+                << '\n';
+    }
 
     gl::shader frag_shader(GL_FRAGMENT_SHADER);
     frag_shader.load_source(frag_path);
+    if (!frag_shader.compile()) {
+      std::cerr << "Shader compilation error: " << frag_shader.info_log()
+                << '\n';
+    }
 
     gl::program program;
     program.attach_shader(vert_shader);
