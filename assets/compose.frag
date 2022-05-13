@@ -4,6 +4,7 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 frag_color;
 
 uniform vec2 texture_size;
+uniform float zoom_amount;
 uniform float time;
 uniform sampler2D color_map;
 uniform sampler2D outline_map;
@@ -13,8 +14,6 @@ const float PI = 3.1415;
 const float PI_4 = PI / 4.0;
 
 void main() {
-    float zoom_amount = (cos(time) + 1.0) / 2.0;
-
     // Another value which affect fisheye effect
     // but always set to vec2(1.0, 1.0).
     vec2 amount = vec2(1.0, 1.0);// cb0_v2.zw;

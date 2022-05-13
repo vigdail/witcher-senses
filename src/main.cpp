@@ -1,4 +1,6 @@
+#include "camera.h"
 #include "mesh.h"
+#include "shader.h"
 
 #include <GLFW/glfw3.h>
 #include <entt/entt.hpp>
@@ -51,35 +53,13 @@ struct DirectionalLight {
 using MeshHandle = std::shared_ptr<Mesh>;
 using World = entt::registry;
 
-struct Shader {
-  gl::program program;
-  std::unordered_map<std::string, int> uniforms{};
-
-  explicit Shader(gl::program &&program) : program{std::move(program)} {}
-
-  void use() const { program.use(); }
-
-  template <class T> void setUniform(const char *name, const T &value) {
-    const auto location = getLocation(name);
-    if (location < 0) {
-      std::cerr << "Bad uniform location: " << name << '\n';
-    }
-    program.set_uniform(location, value);
-  }
-
-  int getLocation(const char *name) {
-    if (auto it = uniforms.find(name); it != uniforms.end()) {
-      return it->second;
-    }
-    const auto location = program.uniform_location(name);
-    uniforms[name] = location;
-    return location;
-  }
-};
-
 struct Move {};
 struct Trace {};
 struct Interesting {};
+
+struct Senses {
+  float amount{0.0f};
+};
 
 void spawnScene(World &world);
 void moveSphereSystem(World &world) {
@@ -229,8 +209,10 @@ void createOutline(World &world) {
 }
 
 struct Input {
+  bool initialized{false};
   float horizontal{};
   float vertical{};
+  bool senses{false};
   glm::vec2 mouse_pos{};
   glm::vec2 mouse_delta{};
   bool left_mouse{};
@@ -242,7 +224,11 @@ void cursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
   auto &input = world->ctx().at<Input>();
   auto &last_pos = input.mouse_pos;
   glm::vec2 new_pos((float)xpos, (float)ypos);
-  input.mouse_delta = new_pos - last_pos;
+  if (input.initialized) {
+    input.mouse_delta = new_pos - last_pos;
+  } else {
+    input.initialized = true;
+  }
   input.mouse_pos = new_pos;
 }
 
@@ -282,6 +268,8 @@ void keyboardCallback(GLFWwindow *window, int key, int scancode, int action,
     case GLFW_KEY_D:
       input.horizontal += 1.0f;
       break;
+    case GLFW_KEY_E:
+      input.senses = true;
     default:
       break;
     }
@@ -299,6 +287,8 @@ void keyboardCallback(GLFWwindow *window, int key, int scancode, int action,
     case GLFW_KEY_D:
       input.horizontal -= 1.0f;
       break;
+    case GLFW_KEY_E:
+      input.senses = false;
     default:
       break;
     }
@@ -308,6 +298,43 @@ void keyboardCallback(GLFWwindow *window, int key, int scancode, int action,
 void resetMouseDelta(World &world) {
   auto &input = world.ctx().at<Input>();
   input.mouse_delta = glm::vec2(0.0f);
+}
+
+void updateCameraView(World &world) {
+  world.view<const Transform, Camera>().each(
+      [](const auto &transform, auto &camera) {
+        camera.updateView(transform.transform());
+      });
+}
+
+void controlCamera(World &world) {
+  const auto &input = world.ctx().at<const Input>();
+  const float dt = 1.0f / 60.0f; // TODO
+  const float speed = 10.0f;
+  const float angular_speed = 0.1f;
+  world.view<Transform, const Camera>().each([&](auto &transform,
+                                                 const auto &camera) {
+    transform.rotation.y -= input.mouse_delta.x * angular_speed * dt;
+    transform.rotation.x += input.mouse_delta.y * angular_speed * dt;
+
+    const auto &m = transform.transform();
+    transform.translation -= glm::vec3((m * glm::vec4(1.0f, 0.0f, 0.0f, 0.0f) *
+                                        input.horizontal * speed * dt));
+    transform.translation += glm::vec3(
+        (m * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f) * input.vertical * speed * dt));
+  });
+}
+
+void controlSenses(World &world) {
+  const auto &input = world.ctx().at<const Input>();
+  auto &senses = world.ctx().at<Senses>();
+  const float dt = 1.0f / 60.0f;
+  if (input.senses) {
+    senses.amount += dt;
+  } else {
+    senses.amount -= dt;
+  }
+  senses.amount = std::max(0.0f, std::min(1.0f, senses.amount));
 }
 
 int main() {
@@ -322,7 +349,7 @@ int main() {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
   GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT,
                                         "Witcher Senses", nullptr, nullptr);
@@ -331,6 +358,7 @@ int main() {
     return EXIT_FAILURE;
   }
   glfwMakeContextCurrent(window);
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
   gl::initialize();
 
 #ifndef NDEBUG
@@ -343,6 +371,7 @@ int main() {
 
   entt::registry world;
   world.ctx().emplace<Input>();
+  world.ctx().emplace<Senses>();
 
   glfwSetWindowUserPointer(window, &world);
   glfwSetCursorPosCallback(window, cursorPosCallback);
@@ -377,15 +406,12 @@ int main() {
   object_shader.use();
 
   spawnScene(world);
-
-  const glm::vec3 camera_origin(3.0f, 3.0f, -10.0f);
-  glm::mat4 view =
-      glm::lookAt(camera_origin, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0));
-  object_shader.setUniform("view", view);
-
-  glm::mat4 proj = glm::perspective(45.0f, (float)WINDOW_WIDTH / WINDOW_HEIGHT,
-                                    0.01f, 1000.0f);
-  object_shader.setUniform("proj", proj);
+  {
+    auto camera_entity = world.create();
+    Camera camera((float)WINDOW_WIDTH / WINDOW_HEIGHT, 45.0f, 0.01f, 1000.0f);
+    world.emplace<Transform>(camera_entity, Transform{{3.0f, 3.0f, -10.0f}});
+    world.emplace<Camera>(camera_entity, camera);
+  }
 
   DirectionalLight directional_light{
       .direction = glm::normalize(glm::vec3(1.0f, 1.0f, -1.0f)),
@@ -414,6 +440,9 @@ int main() {
 
   while (!glfwWindowShouldClose(window)) {
     moveSphereSystem(world);
+    controlCamera(world);
+    controlSenses(world);
+    updateCameraView(world);
 
     const auto &offscreen = world.ctx().at<const Offscreen>();
     offscreen.framebuffer.bind();
@@ -428,6 +457,10 @@ int main() {
     gl::set_stencil_mask(0xff);
     gl::set_stencil_operation(GL_KEEP, GL_KEEP, GL_REPLACE);
     object_shader.use();
+    const auto camera_entity = world.view<const Camera>()[0];
+    const auto &camera = world.get<const Camera>(camera_entity);
+    object_shader.setUniform("view", camera.getView());
+    object_shader.setUniform("proj", camera.getProjection());
 
     gl::set_stencil_function(GL_ALWAYS, 0x00, 0xff);
     auto traces = world.view<Trace>();
@@ -440,12 +473,10 @@ int main() {
           mesh->bind();
           if (traces.contains(entity)) {
             gl::set_stencil_function(GL_ALWAYS, 0x8, 0xff);
-            gl::set_stencil_mask(0xff);
           } else if (interesting.contains(entity)) {
             gl::set_stencil_function(GL_ALWAYS, 0x4, 0xff);
-            gl::set_stencil_mask(0xff);
           } else {
-            gl::set_stencil_mask(0x00);
+            gl::set_stencil_function(GL_ALWAYS, 0x0, 0xff);
           }
           gl::draw_elements(GL_TRIANGLES, mesh->getIndexCount(),
                             GL_UNSIGNED_INT, nullptr);
@@ -483,10 +514,12 @@ int main() {
     gl::clear(GL_COLOR_BUFFER_BIT);
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
+    const auto &senses = world.ctx().at<Senses>();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
     compose_shader.use();
     compose_shader.setUniform("time", (float)glfwGetTime());
+    compose_shader.setUniform("zoom_amount", senses.amount);
     offscreen.color.bind_unit(0);
     outline.textures.current().bind_unit(1);
     intensity.color.bind_unit(2);
@@ -495,10 +528,9 @@ int main() {
 
     outline.textures.swap();
 
+    resetMouseDelta(world);
     glfwSwapBuffers(window);
     glfwPollEvents();
-
-    resetMouseDelta(world);
   }
 
   glfwDestroyWindow(window);
@@ -514,7 +546,7 @@ void spawnScene(World &world) {
   world.emplace<MeshHandle>(sphere, sphere_mesh);
   world.emplace<Transform>(sphere, Transform({0.0f, 1.0f, 0.0}));
   world.emplace<Color>(sphere, Color{glm::vec3(0.5f, 0.6f, 0.3f)});
-  world.emplace<Move>(sphere, Move{});
+  //  world.emplace<Move>(sphere, Move{});
   world.emplace<Trace>(sphere);
 
   auto sphere_2 = world.create();
