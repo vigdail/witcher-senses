@@ -7,6 +7,7 @@ add_subdirectory(vendor)
 
 include_directories(vendor/glad/include)
 include_directories(vendor/gl/include)
+include_directories(vendor/glm)
 include_directories(vendor/assimp/include)
 include_directories(vendor/entt/single_include)
 

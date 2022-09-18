@@ -28,7 +28,7 @@ void main() {
     vec2 offset = vec2(0.0, 0.0);// cb3_v2.xy;
 
     // Main value which causes fisheye effect [0-1]
-    const float fisheye_amount = zoom_amount;
+    const float fisheye_amount = clamp(zoom_amount, 0.0, 1.0);
 
     // Scale at first from [0-1] to [-1;1], then calculate abs
     vec2 uv3 = abs(uv * 2.0 - 1.0);
@@ -129,7 +129,6 @@ void main() {
     vec3 color_greyish = dot(color_circle_main, vec3(0.3, 0.3, 0.3)).xxx;
 
     vec3 main_color = mix(color_greyish, color_circle_main, mask_gray_corners) * 0.7;
-
     main_color = mix(color, main_color, fisheye_amount);
 
     vec3 senses_traces = main_outline_traces * color_traces;

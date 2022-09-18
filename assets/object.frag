@@ -16,7 +16,7 @@ layout(std140, binding = 0) uniform  DirectionalLight {
 void main() {
     vec3 norm = normalize(normal);
     float diffuse = max(dot(norm, light.direction), 0.0);
-    vec3 diffuse_color = diffuse * light.color;
+    vec3 diffuse_color = diffuse * light.color * light.intensity;
     float ambient = 0.1;
     vec3 ambient_color = ambient * light.color;
 

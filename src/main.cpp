@@ -73,13 +73,13 @@ struct Offscreen {
   gl::texture_2d depth_stencil;
 };
 
-void createOffscreenFramebuffer(World &world, int width, int height) {
+Offscreen createOffscreenFramebuffer(World &world, int width, int height, std::size_t color_format) {
   gl::texture_2d color;
   color.set_min_filter(GL_LINEAR);
   color.set_mag_filter(GL_LINEAR);
   color.set_wrap_s(GL_REPEAT);
   color.set_wrap_t(GL_REPEAT);
-  color.set_storage(1, GL_RGBA8, width, height);
+  color.set_storage(1, color_format, width, height);
 
   gl::texture_2d depth_stencil;
   depth_stencil.set_min_filter(GL_LINEAR);
@@ -93,8 +93,11 @@ void createOffscreenFramebuffer(World &world, int width, int height) {
   framebuffer.attach_texture(GL_DEPTH_STENCIL_ATTACHMENT, depth_stencil, 0);
   framebuffer.set_draw_buffer(GL_COLOR_ATTACHMENT0);
 
-  world.ctx().emplace<Offscreen>(std::move(framebuffer), std::move(color),
-                                 std::move(depth_stencil));
+  return Offscreen{
+      std::move(framebuffer),
+      std::move(color),
+      std::move(depth_stencil),
+  };
 }
 
 struct Intensity {
@@ -422,11 +425,13 @@ int main() {
   light_ubo.set_data(sizeof(DirectionalLight), &directional_light);
   light_ubo.bind_base(GL_UNIFORM_BUFFER, 0);
 
-  createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
+  const auto color = createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGB32F);
+  const auto hdr = createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGB32F);
+  const auto ldr = createOffscreenFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA8);
   createIntensityFramebuffer(world, WINDOW_WIDTH, WINDOW_HEIGHT);
   createOutline(world);
 
-  glm::vec2 texture_size((float)WINDOW_WIDTH, (float)WINDOW_HEIGHT);
+  glm::vec2 texture_size((float) WINDOW_WIDTH, (float) WINDOW_HEIGHT);
   Shader compose_shader =
       create_shader("../assets/compose.vert", "../assets/compose.frag");
   compose_shader.use();
@@ -434,6 +439,9 @@ int main() {
   compose_shader.setUniform("outline_map", 1);
   compose_shader.setUniform("intensity_map", 2);
   compose_shader.setUniform("texture_size", texture_size);
+
+  Shader colormap_shader =
+      create_shader("../assets/compose.vert", "../assets/colormapping.frag");
 
   gl::vertex_array quad_vao;
 
@@ -443,12 +451,12 @@ int main() {
     controlSenses(world);
     updateCameraView(world);
 
-    const auto &offscreen = world.ctx().at<const Offscreen>();
-    offscreen.framebuffer.bind();
+//    const auto &hdr = world.ctx().at<const Offscreen>();
+    color.framebuffer.bind();
     gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
     gl::set_clear_color({0.3, 0.3, 0.3, 1.0});
     gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
-              GL_STENCIL_BUFFER_BIT);
+        GL_STENCIL_BUFFER_BIT);
 
     gl::set_depth_test_enabled(true);
     gl::set_stencil_test_enabled(true);
@@ -486,7 +494,7 @@ int main() {
     auto &intensity = world.ctx().at<Intensity>();
     intensity.framebuffer.bind();
     intensity.framebuffer.attach_texture(GL_DEPTH_STENCIL_ATTACHMENT,
-                                         offscreen.depth_stencil, 0);
+                                         color.depth_stencil, 0);
 
     gl::set_clear_color({0.0, 0.0, 0.0, 1.0});
     gl::clear(GL_COLOR_BUFFER_BIT);
@@ -514,14 +522,20 @@ int main() {
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
     const auto &senses = world.ctx().at<Senses>();
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    hdr.framebuffer.bind();
     gl::set_viewport({0, 0}, {WINDOW_WIDTH, WINDOW_HEIGHT});
     compose_shader.use();
-    compose_shader.setUniform("time", (float)glfwGetTime());
+    compose_shader.setUniform("time", (float) glfwGetTime());
     compose_shader.setUniform("zoom_amount", senses.amount);
-    offscreen.color.bind_unit(0);
+    color.color.bind_unit(0);
     outline.textures.current().bind_unit(1);
     intensity.color.bind_unit(2);
+    gl::clear(GL_COLOR_BUFFER_BIT);
+    gl::draw_arrays(GL_TRIANGLES, 0, 6);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    colormap_shader.use();
+    hdr.color.bind_unit(0);
     gl::clear(GL_COLOR_BUFFER_BIT);
     gl::draw_arrays(GL_TRIANGLES, 0, 6);
 
